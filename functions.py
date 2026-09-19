@@ -2,7 +2,7 @@ import numpy as np
 
 
 
-def project(vertices, w_dist=2.0, z_dist=3.0):#w_dist and z_dist are distance from camera
+def project(vertices, w_dist, z_dist):#w_dist and z_dist are distance from camera
     w = vertices[:, 3]
     xyz = vertices[:, :3] / (w_dist - w)[:, None] # projection math for w
 
@@ -26,12 +26,12 @@ def edge_list(vertices):
 
     return edges
 
-            
-def rotate_xw(vertices,theta): 
-    R = np.array([[np.cos(theta),0,0,-np.sin(theta)],
-                                [0,1,0,0],
-                                [0,0,1,0],
-                                [np.sin(theta),0,0,np.cos(theta)]])
+def change_view_position(camera_position,tesseract_position): 
+    tesseract_position = tesseract_position - camera_position
+    camera_position = camera_position - camera_position
+    return tesseract_position,camera_position
 
-    rotating_vertices = vertices @ R.T
-    return rotating_vertices
+def change_view_orientation(camera_orientation,tesseract_vertices,tesseract_position): 
+    tesseract_vertices = tesseract_vertices @ camera_orientation.T
+    view_tesseract_position = tesseract_position @ camera_orientation.T
+    return view_tesseract_position,tesseract_vertices
