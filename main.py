@@ -7,13 +7,17 @@ from camera import *
 pygame.init()
 screen_width = 800
 screen_height = 600
+Z_DIST = 20
+W_DIST = 20
+MAX_SCALE = 4
+ESP = Z_DIST/MAX_SCALE
 screen = pygame.display.set_mode((screen_width, screen_height))
 clock = pygame.time.Clock()
 pygame.mouse.set_visible(False)
 pygame.event.set_grab(True)
 
 running = True
-tesseract = Tesseract(1,2,6,1)
+tesseract = Tesseract(1,2,1,1)
 tesseract_position = tesseract.position
 tesseract_vertices = tesseract.vertices
 
@@ -51,47 +55,34 @@ while running:
 
 
     #projection
-    projected_tesseract = project(translated,camera_position[3] +5,camera_position[2] +5)
-    projected_tesseract = projected_tesseract*100 + (screen_width // 2, screen_height // 2)
+    projected_tesseract = project(translated,W_DIST,Z_DIST,ESP)
+    if not(projected_tesseract is None):
+        projected_tesseract = projected_tesseract*100 + (screen_width // 2, screen_height // 2)
 
 
     
     keys = pygame.key.get_pressed()
 
     #movement of camera
-    if keys[pygame.K_f]:
-        camera_position = camera.travel_y(3*dt)
-    if keys[pygame.K_r]:
-        camera_position = camera.travel_y(-3*dt)
     if keys[pygame.K_d]:
         camera_position = camera.travel_x(3*dt)
     if keys[pygame.K_a]:
         camera_position = camera.travel_x(-3*dt)
     if keys[pygame.K_s]:
-        camera_position = camera.travel_z(3*dt)
-    if keys[pygame.K_w]:
         camera_position = camera.travel_z(-3*dt)
+    if keys[pygame.K_w]:
+        camera_position = camera.travel_z(3*dt)
     if keys[pygame.K_e]:
-        camera_position = camera.travel_w(3*dt)
+        camera_position = camera.travel_y(3*dt)
     if keys[pygame.K_q]:
-        camera_position = camera.travel_w(-3*dt)
+        camera_position = camera.travel_y(-3*dt)
 
-    #direction of camera
-    # if dx:
-    #     sensitivity = 0.01
-    #     camera_orientation =camera.direction_xz(dx*sensitivity)
-    #     camera_orientation =camera.direction_yz(dy*sensitivity)
-    # else : 
-    #     camera_orientation = camera.default()
-
-    # print(camera.orientation)
-
-    
 
     dt = clock.tick(60) / 1000
     # --- drawing code here ---
-    for i,j in edges : 
-        pygame.draw.line(surface=screen,color="gray",start_pos=projected_tesseract[i],end_pos=projected_tesseract[j])
+    if not(projected_tesseract is None) :
+        for i,j in edges : 
+            pygame.draw.line(surface=screen,color="gray",start_pos=projected_tesseract[i],end_pos=projected_tesseract[j])
     
 
     pygame.display.flip()

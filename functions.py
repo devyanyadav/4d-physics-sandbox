@@ -2,14 +2,18 @@ import numpy as np
 
 
 
-def project(vertices, w_dist, z_dist):#w_dist and z_dist are distance from camera
+def project(vertices, w_dist, z_dist,ESP):#w_dist and z_dist are distance from camera
     w = vertices[:, 3]
-    xyz = vertices[:, :3] / (w_dist - w)[:, None] # projection math for w
-
-    z = xyz[:, 2]
-    xy = xyz[:, :2] / (z_dist - z)[:, None] # projection math for z
-
-    return xy
+    if (w_dist-vertices[:,3] >= ESP).all() :
+        xyz = vertices[:, :3] / (w_dist/(w_dist - w))[:, None] # projection math for w
+        z = xyz[:, 2]
+        if (z_dist-vertices[:,2] >=ESP).all():
+            xy = xyz[:, :2] / (z_dist/(z_dist - z))[:, None]
+            return xy
+        else : 
+            return None # projection math for z
+    else : 
+        return None
 
 
 def edge_list(vertices): 
