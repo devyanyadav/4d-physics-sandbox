@@ -1,7 +1,7 @@
 import pygame
 from tesseract import Tesseract
 from functions import edge_list, project, change_view_position, change_view_orientation
-from rotation import double_rotation, rotate_xw, rotate_yz
+from rotation import *
 from camera import Camera
 
 pygame.init()
@@ -22,7 +22,7 @@ NEAR_CLIP_MARGIN = Z_DIST / MAX_SCALE  # cull when (dist - coordinate) drops bel
 MOVE_SPEED = 3
 KEY_ROT_SPEED = 1.5      # radians per second
 MOUSE_SENSITIVITY = 0.001
-OBJECT_SPIN = 0          # object auto-rotation, off for now
+OBJECT_SPIN = 0        # object auto-rotation, off for now
 
 #setup
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -31,10 +31,15 @@ pygame.mouse.set_visible(False)
 pygame.event.set_grab(True)
 
 #scene
-tesseract = Tesseract(1, 2, 1, 1)
-world_position = tesseract.position
-world_vertices = tesseract.vertices
-edges = edge_list(tesseract.vertices)
+tesseracts = [Tesseract(4,2,3,1),Tesseract(2,4,1,6),Tesseract(-1,-4,-3,3)]
+if not(len(tesseracts) == 0) :
+    tesseracts_world_position = []
+    tesseracts_world_vertices = []
+    tesseracts_edges = []
+    for i in tesseracts : 
+        tesseracts_world_position.append(i.position)
+        tesseracts_world_vertices.append(i.vertices)
+        tesseracts_edges.append(edge_list(i.vertices))
 
 camera = Camera()
 camera_position = camera.position
@@ -98,21 +103,25 @@ while running:
 
     #view transform
     # world_* is the permanent copy, view_* is rebuilt every frame and never written back
-    world_vertices = double_rotation(rotate_xw, rotate_yz, OBJECT_SPIN, OBJECT_SPIN, world_vertices)
-    position_rel_camera, _ = change_view_position(camera_position, world_position)
-    view_position, view_vertices = change_view_orientation(camera_orientation, world_vertices, position_rel_camera)
-    camera_space_vertices = view_vertices + view_position
 
-    #projection
-    # None means a vertex is inside the near-clip margin, so the object isn't drawn
-    projected = project(camera_space_vertices, W_DIST, Z_DIST, NEAR_CLIP_MARGIN)
+    projected_tesseracts = []
+    for world_position,world_vertices in zip(tesseracts_world_position,tesseracts_world_vertices):
+        world_vertices = double_rotation(rotate_yz, rotate_zw, OBJECT_SPIN, OBJECT_SPIN, world_vertices)
+        position_rel_camera, _ = change_view_position(camera_position, world_position)
+        view_position, view_vertices = change_view_orientation(camera_orientation, world_vertices, position_rel_camera)
+        camera_space_vertices = view_vertices + view_position
+
+        #projection
+        # None means a vertex is inside the near-clip margin, so the object isn't drawn
+        projected_tesseracts.append(project(camera_space_vertices, W_DIST, Z_DIST, NEAR_CLIP_MARGIN))
 
     #drawing
     screen.fill((0, 0, 0))
-    if projected is not None:
-        screen_points = projected * PIXELS_PER_UNIT + SCREEN_CENTER
-        for i, j in edges:
-            pygame.draw.line(screen, "gray", screen_points[i], screen_points[j])
+    for edges,projected in zip(tesseracts_edges,projected_tesseracts):
+        if projected is not None:
+            screen_points = projected * PIXELS_PER_UNIT + SCREEN_CENTER
+            for i, j in edges:
+                pygame.draw.line(screen, "gray", screen_points[i], screen_points[j])
     pygame.display.flip()
 
 pygame.quit()
