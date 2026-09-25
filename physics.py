@@ -43,20 +43,72 @@ def compute_force_and_acceleration(positions, masses, n):
         acceleration = force_tesseracts[i]/masses[i]
         acceleration_tesseracts.append(acceleration)
 
-    return force_tesseracts, acceleration_tesseracts, tesseracts_r
+    return np.array(force_tesseracts), np.array(acceleration_tesseracts), tesseracts_r
 
 force_tesseracts, acceleration_tesseracts, tesseracts_r = compute_force_and_acceleration(position_tesseracts, mass_of_tesseracts, n)
 
 #comparing euler's method and RK4
+euler_velocities = []
+euler_positions = []
+
+rk4_velocities = []
+rk4_positions = []
+
 f = 0
-while f<10:
-    f+=1
-    #findign changing acceleration
-    _,acceleration_tesseracts,_ = compute_force_and_acceleration(position_tesseracts,mass_of_tesseracts,n)
+while f < 10:
+    f += 1
+
+    # acceleration comes from wherever the euler trajectory currently is,
+    positions_for_accel = euler_positions if len(euler_positions) != 0 else position_tesseracts
+    _, acceleration_tesseracts, _ = compute_force_and_acceleration(positions_for_accel, mass_of_tesseracts, n)
+
+    new_velocities = []
+    new_positions = []
     for i in range(n):
-        #euler's method
-        euler_new_velocity = tesseract_velocities[i] + acceleration_tesseracts[i] * DT
-        tesseract_velocities[i] = euler_new_velocity
-        euler_r = position_tesseracts[i] + tesseract_velocities[i] * DT
-        position_tesseracts[i] = euler_r
-        #RK4
+        old_velocity = tesseract_velocities[i] if len(euler_velocities) == 0 else euler_velocities[i]
+        old_position = position_tesseracts[i] if len(euler_positions) == 0 else euler_positions[i]
+
+        # semi-implicit euler: velocity first, then position uses the *new* velocity
+        v_new = old_velocity + acceleration_tesseracts[i] * DT
+        r_new = old_position + v_new * DT
+
+        new_velocities.append(v_new)
+        new_positions.append(r_new)
+
+    euler_velocities = new_velocities
+    euler_positions = new_positions
+
+    #RK4
+    positions_for_accel = rk4_positions if len(rk4_positions) != 0 else position_tesseracts
+    velocity_for_r = rk4_velocities if len(rk4_velocities) != 0 else tesseract_velocities
+
+    # four stages, each computing its r-slope and v-slope together,
+    # so each stage only ever depends on the previous stage's results
+
+    # stage 1
+    k1_r = velocity_for_r
+    _, k1_v, _ = compute_force_and_acceleration(positions_for_accel, mass_of_tesseracts, n)
+
+    # stage 2 (half-step, using stage 1's results)
+    k2_r = velocity_for_r + (DT/2)*k1_v
+    _, k2_v, _ = compute_force_and_acceleration(positions_for_accel + (DT/2)*k1_r, mass_of_tesseracts, n)
+
+    # stage 3 (half-step, using stage 2's results)
+    k3_r = velocity_for_r + (DT/2)*k2_v
+    _, k3_v, _ = compute_force_and_acceleration(positions_for_accel + (DT/2)*k2_r, mass_of_tesseracts, n)
+
+    # stage 4 (full step, using stage 3's results)
+    k4_r = velocity_for_r + DT*k3_v
+    _, k4_v, _ = compute_force_and_acceleration(positions_for_accel + DT*k3_r, mass_of_tesseracts, n)
+
+    new_velocities = []
+    new_positions = []
+    for i in range(n):
+        v_new = velocity_for_r[i] + (DT/6)*(k1_v[i] + 2*k2_v[i] + 2*k3_v[i] + k4_v[i])
+        r_new = positions_for_accel[i] + (DT/6)*(k1_r[i] + 2*k2_r[i] + 2*k3_r[i] + k4_r[i])
+
+        new_velocities.append(v_new)
+        new_positions.append(r_new)
+
+    rk4_velocities = np.array(new_velocities)
+    rk4_positions = np.array(new_positions)
