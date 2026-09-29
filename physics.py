@@ -45,14 +45,28 @@ def compute_force_and_acceleration(positions, masses, n):
 
     return np.array(force_tesseracts), np.array(acceleration_tesseracts), tesseracts_r
 
+def total_energy(positions,velocities,masses):
+    kinetic_energy = 0
+    potential_energy = 0
+    for i in range(len(masses)):
+        speed_squared = np.dot(velocities[i],velocities[i])
+        kinetic_energy += 0.5*masses[i]*speed_squared 
+        for j in range(i+1,len(masses)):
+            separation = positions[j] - positions[i]
+            seperation_squared = np.dot(separation,separation)
+            potential_energy += (-G*masses[i]*masses[j])/(2*seperation_squared)
+    return kinetic_energy + potential_energy
+
 force_tesseracts, acceleration_tesseracts, tesseracts_r = compute_force_and_acceleration(position_tesseracts, mass_of_tesseracts, n)
 
 #comparing euler's method and RK4
 euler_velocities = []
 euler_positions = []
+all_euler_energy = []
 
 rk4_velocities = []
 rk4_positions = []
+all_rk4_energy = []
 
 f = 0
 while f < 10:
@@ -77,6 +91,9 @@ while f < 10:
 
     euler_velocities = new_velocities
     euler_positions = new_positions
+    euler_energy = total_energy(euler_positions,euler_velocities,mass_of_tesseracts)
+    all_euler_energy.append(euler_energy)
+    
 
     #RK4
     positions_for_accel = rk4_positions if len(rk4_positions) != 0 else position_tesseracts
@@ -112,3 +129,12 @@ while f < 10:
 
     rk4_velocities = np.array(new_velocities)
     rk4_positions = np.array(new_positions)
+
+    rk4_energy = total_energy(rk4_positions,rk4_velocities,mass_of_tesseracts)
+    all_rk4_energy.append(rk4_energy)
+
+print(all_euler_energy)
+print(all_rk4_energy)
+
+
+
