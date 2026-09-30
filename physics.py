@@ -1,140 +1,89 @@
 import numpy as np
-import sympy as sp
+
+G = 1        # gravitational constant (toy units)
+DT = 0.01    # fixed physics timestep, independent of render dt
+STEPS = 10   # start at 10 to check against entry 13, then raise to thousands
+
+INITIAL_POSITIONS = np.array([[0.0, 0.0, 0.0, 0.0],
+                              [1.0, 3.0, 9.0, 2.0]])
+INITIAL_VELOCITIES = np.array([[-1.0, 1.0, 0.0, 4.0],
+                               [0.0, -1.0, 0.0, 0.0]])
+MASSES = np.array([5.0, 8.0])
 
 
-
-G = 1 # universal constant of gravity
-DT = 0.01  # fixed physics timestep, independent of render dt
-
-#testing
-position_tesseracts = np.array([[0.0,0.0,0.0,0.0],[1.0,3.0,9.0,2.0]])
-tesseract_velocities = np.array([
-    [-1.0, 1.0, 0.0, 4.0],
-    [0.0, -1.0, 0.0, 0.0]
-])
-mass_of_tesseracts = [5,8] #this array represents the mass of different tesseracts
-charge_of_tesseracts = [-1,1] #this array represents the charge of different tesseracts
-
-n = len(position_tesseracts)
-
-#calculation of force and acceleration, wrapped as a function
-def compute_force_and_acceleration(positions, masses, n):
-    force_tesseracts = []
-    tesseracts_r = []
-
+def compute_acceleration(positions, masses):
+    n = len(masses)
+    accelerations = []
     for i in range(n):
-        force_accumulated = 0 # gravitational force exerted on one one body by all the other bodies
+        force_accumulated = np.zeros_like(positions[i])  # reset once per i
         for j in range(n):
-            if j == i : 
+            if j == i:
                 continue
-            # calculating r(straight line distance between two objects)
-            seperation = positions[j] - positions[i]
-            r = np.sqrt(np.sum(seperation**2))
-            tesseracts_r.append(r)
-            # calculating gravitational force exerted by second object on first object
-            force = (G*masses[j]*masses[i])/r**4 * seperation
-            force_accumulated += force
-        force_tesseracts.append(force_accumulated) 
+            separation = positions[j] - positions[i]
+            r = np.sqrt(np.sum(separation**2))
+            force_accumulated += (G * masses[i] * masses[j]) / r**4 * separation
+        accelerations.append(force_accumulated / masses[i])
+    return np.array(accelerations)
 
-    #calculating acceleration 
-    #F=ma
-    acceleration_tesseracts = []
-    for i in range(len(force_tesseracts)):
-        acceleration = force_tesseracts[i]/masses[i]
-        acceleration_tesseracts.append(acceleration)
 
-    return np.array(force_tesseracts), np.array(acceleration_tesseracts), tesseracts_r
-
-def total_energy(positions,velocities,masses):
+def total_energy(positions, velocities, masses):
     kinetic_energy = 0
     potential_energy = 0
     for i in range(len(masses)):
-        speed_squared = np.dot(velocities[i],velocities[i])
-        kinetic_energy += 0.5*masses[i]*speed_squared 
-        for j in range(i+1,len(masses)):
+        kinetic_energy += 0.5 * masses[i] * np.dot(velocities[i], velocities[i])
+        for j in range(i + 1, len(masses)):  # j > i: each pair counted once
             separation = positions[j] - positions[i]
-            seperation_squared = np.dot(separation,separation)
-            potential_energy += (-G*masses[i]*masses[j])/(2*seperation_squared)
+            separation_squared = np.dot(separation, separation)
+            potential_energy += (-G * masses[i] * masses[j]) / (2 * separation_squared)
     return kinetic_energy + potential_energy
 
-force_tesseracts, acceleration_tesseracts, tesseracts_r = compute_force_and_acceleration(position_tesseracts, mass_of_tesseracts, n)
 
-#comparing euler's method and RK4
-euler_velocities = []
-euler_positions = []
-all_euler_energy = []
+def euler_step(positions, velocities, masses, dt):
+    """Semi-implicit Euler: velocity first, then position uses the new velocity."""
+    acceleration = compute_acceleration(positions, masses)
+    new_velocities = velocities + acceleration * dt
+    new_positions = positions + new_velocities * dt
+    return new_positions, new_velocities
 
-rk4_velocities = []
-rk4_positions = []
-all_rk4_energy = []
 
-f = 0
-while f < 10:
-    f += 1
+def rk4_step(positions, velocities, masses, dt):
+    # each stage computes its r-slope and v-slope together
+    k1_r = velocities
+    k1_v = compute_acceleration(positions, masses)
 
-    # acceleration comes from wherever the euler trajectory currently is,
-    positions_for_accel = euler_positions if len(euler_positions) != 0 else position_tesseracts
-    _, acceleration_tesseracts, _ = compute_force_and_acceleration(positions_for_accel, mass_of_tesseracts, n)
+    k2_r = velocities + (dt / 2) * k1_v
+    k2_v = compute_acceleration(positions + (dt / 2) * k1_r, masses)
 
-    new_velocities = []
-    new_positions = []
-    for i in range(n):
-        old_velocity = tesseract_velocities[i] if len(euler_velocities) == 0 else euler_velocities[i]
-        old_position = position_tesseracts[i] if len(euler_positions) == 0 else euler_positions[i]
+    k3_r = velocities + (dt / 2) * k2_v
+    k3_v = compute_acceleration(positions + (dt / 2) * k2_r, masses)
 
-        # semi-implicit euler: velocity first, then position uses the *new* velocity
-        v_new = old_velocity + acceleration_tesseracts[i] * DT
-        r_new = old_position + v_new * DT
+    k4_r = velocities + dt * k3_v
+    k4_v = compute_acceleration(positions + dt * k3_r, masses)
 
-        new_velocities.append(v_new)
-        new_positions.append(r_new)
+    new_velocities = velocities + (dt / 6) * (k1_v + 2 * k2_v + 2 * k3_v + k4_v)
+    new_positions = positions + (dt / 6) * (k1_r + 2 * k2_r + 2 * k3_r + k4_r)
+    return new_positions, new_velocities
 
-    euler_velocities = new_velocities
-    euler_positions = new_positions
-    euler_energy = total_energy(euler_positions,euler_velocities,mass_of_tesseracts)
-    all_euler_energy.append(euler_energy)
+
+
+def run(step_fn, dt, steps):
+    positions = INITIAL_POSITIONS.copy()
+    velocities = INITIAL_VELOCITIES.copy()
+    energy_drift = []
+    initial_energy = total_energy(positions,velocities,MASSES)
+    
+    for i in range(steps):
+        positions,velocities = step_fn(positions,velocities,MASSES,dt)
+        new_energy = total_energy(positions,velocities,MASSES)
+        energy_drift.append((new_energy-initial_energy)/abs(initial_energy))
+
+    return energy_drift
+
     
 
-    #RK4
-    positions_for_accel = rk4_positions if len(rk4_positions) != 0 else position_tesseracts
-    velocity_for_r = rk4_velocities if len(rk4_velocities) != 0 else tesseract_velocities
 
-    # four stages, each computing its r-slope and v-slope together,
-    # so each stage only ever depends on the previous stage's results
-
-    # stage 1
-    k1_r = velocity_for_r
-    _, k1_v, _ = compute_force_and_acceleration(positions_for_accel, mass_of_tesseracts, n)
-
-    # stage 2 (half-step, using stage 1's results)
-    k2_r = velocity_for_r + (DT/2)*k1_v
-    _, k2_v, _ = compute_force_and_acceleration(positions_for_accel + (DT/2)*k1_r, mass_of_tesseracts, n)
-
-    # stage 3 (half-step, using stage 2's results)
-    k3_r = velocity_for_r + (DT/2)*k2_v
-    _, k3_v, _ = compute_force_and_acceleration(positions_for_accel + (DT/2)*k2_r, mass_of_tesseracts, n)
-
-    # stage 4 (full step, using stage 3's results)
-    k4_r = velocity_for_r + DT*k3_v
-    _, k4_v, _ = compute_force_and_acceleration(positions_for_accel + DT*k3_r, mass_of_tesseracts, n)
-
-    new_velocities = []
-    new_positions = []
-    for i in range(n):
-        v_new = velocity_for_r[i] + (DT/6)*(k1_v[i] + 2*k2_v[i] + 2*k3_v[i] + k4_v[i])
-        r_new = positions_for_accel[i] + (DT/6)*(k1_r[i] + 2*k2_r[i] + 2*k3_r[i] + k4_r[i])
-
-        new_velocities.append(v_new)
-        new_positions.append(r_new)
-
-    rk4_velocities = np.array(new_velocities)
-    rk4_positions = np.array(new_positions)
-
-    rk4_energy = total_energy(rk4_positions,rk4_velocities,mass_of_tesseracts)
-    all_rk4_energy.append(rk4_energy)
-
-print(all_euler_energy)
-print(all_rk4_energy)
-
-
-
+if __name__ == "__main__":
+    euler_drift = run(euler_step, DT, STEPS)
+    rk4_drift = run(rk4_step, DT, STEPS)
+    print("Euler final drift:", euler_drift[-1],)
+    print("RK4   final drift:", rk4_drift[-1],)
