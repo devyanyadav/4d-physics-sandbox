@@ -1,8 +1,9 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 G = 1        # gravitational constant (toy units)
 DT = 0.01    # fixed physics timestep, independent of render dt
-STEPS = 10   # start at 10 to check against entry 13, then raise to thousands
+STEPS = 5000  # start at 10 to check against entry 13, then raise to thousands
 
 INITIAL_POSITIONS = np.array([[0.0, 0.0, 0.0, 0.0],
                               [1.0, 3.0, 9.0, 2.0]])
@@ -71,19 +72,44 @@ def run(step_fn, dt, steps):
     velocities = INITIAL_VELOCITIES.copy()
     energy_drift = []
     initial_energy = total_energy(positions,velocities,MASSES)
+    min_seperation = float("inf") # minimum distance between two objects; initially infinity
     
     for i in range(steps):
         positions,velocities = step_fn(positions,velocities,MASSES,dt)
         new_energy = total_energy(positions,velocities,MASSES)
         energy_drift.append((new_energy-initial_energy)/abs(initial_energy))
+        seperation = positions[1] - positions[0]
+        r_squared = np.dot(seperation,seperation)
+        r = np.sqrt(r_squared)
+        min_seperation = min(min_seperation,r)
 
-    return energy_drift
+    print(np.sqrt(r_squared))
+    return energy_drift,min_seperation
+
+def plot_drift(euler_drift, rk4_drift, dt):
+    t = np.arange(1, len(euler_drift) + 1) * dt
+    plt.figure(figsize=(8, 5))
+    plt.semilogy(t, np.abs(euler_drift), label="Euler (semi-implicit)")
+    rk4_abs = np.abs(rk4_drift)
+    rk4_abs[rk4_abs < 1e-17] = np.nan          # mask sub-noise points
+    plt.semilogy(t, rk4_abs, label="RK4")
+
+    plt.axhline(1e-16, color="gray", linestyle="--", label="rounding-noise scale")
+    plt.xlabel("time")
+    plt.ylabel("|relative energy drift|")
+    plt.title("Energy drift: Euler vs RK4 (scattering encounter, DT = " + str(dt) + ")")
+    plt.legend()
+    plt.grid(True, which="both", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig("drift.png", dpi=150)
+    plt.show()
 
     
 
 
 if __name__ == "__main__":
-    euler_drift = run(euler_step, DT, STEPS)
-    rk4_drift = run(rk4_step, DT, STEPS)
-    print("Euler final drift:", euler_drift[-1],)
-    print("RK4   final drift:", rk4_drift[-1],)
+    euler_drift,closest_euler = run(euler_step, DT, STEPS)
+    rk4_drift,closest_rk4 = run(rk4_step, DT, STEPS)
+    print("Euler final drift:", euler_drift[-1],"closest: ",closest_euler)
+    print("RK4   final drift:", rk4_drift[-1],"closest: ",closest_rk4)
+    plot_drift(euler_drift,rk4_drift,DT)
