@@ -104,10 +104,34 @@ def plot_drift(euler_drift, rk4_drift, dt):
     plt.savefig("drift.png", dpi=150)
     plt.show()
 
+def sweep(step_fn,dts,T):
+    drifts = []
+    seperations = []
+    for dt in dts: 
+        steps = int(np.round(T/dt))
+        energy_drift,min_seperation = run(step_fn,dt,steps)
+        max_drift = np.max(np.abs(energy_drift))
+        drifts.append(max_drift)
+        seperations.append(min_seperation)
+    return drifts,seperations
+
+def orders(dts, errors):
+    ps = []
+    for k in range(len(dts) - 1):
+        p = np.log(errors[k] / errors[k + 1]) / np.log(dts[k] / dts[k + 1])
+        ps.append(p)
+    return ps
+
 
 if __name__ == "__main__":
-    euler_drift, closest_euler = run(euler_step, DT, STEPS)
-    rk4_drift, closest_rk4 = run(rk4_step, DT, STEPS)
-    print("Euler final drift:", euler_drift[-1], "closest:", closest_euler)
-    print("RK4   final drift:", rk4_drift[-1], "closest:", closest_rk4)
-    plot_drift(euler_drift, rk4_drift, DT)
+    euler_dts = [0.01, 0.005, 0.0025]
+    rk4_dts = [0.4, 0.2, 0.1, 0.05]
+    euler_drifts,euler_seperations =sweep(euler_step,euler_dts,50)
+    rk4_drifts,rk4_seperations=sweep(rk4_step,rk4_dts,50)
+    for i in range(len(euler_dts)):
+        print(f"{euler_dts[i]} | {euler_drifts[i]} | {euler_seperations[i]}",)
+    for i in range(len(rk4_dts)):
+        print(f"{rk4_dts[i]} | {rk4_drifts[i]} | {rk4_seperations[i]}")
+    print("Euler p:", orders(euler_dts, euler_drifts))
+    print("RK4 p:  ", orders(rk4_dts, rk4_drifts))
+    
