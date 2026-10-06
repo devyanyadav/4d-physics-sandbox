@@ -12,22 +12,22 @@ INITIAL_VELOCITIES = np.array([[-1.0, 1.0, 0.0, 4.0],
 MASSES = np.array([5.0, 8.0])
 
 
-def compute_acceleration(positions, masses):
-    n = len(masses)
-    accelerations = []
-    for i in range(n):
-        force_accumulated = np.zeros_like(positions[i])  # reset once per i
-        for j in range(n):
-            if j == i:
-                continue
-            separation = positions[j] - positions[i]
-            r = np.sqrt(np.sum(separation**2))
-            force_accumulated += (G * masses[i] * masses[j]) / r**4 * separation
-        accelerations.append(force_accumulated / masses[i])
+def compute_acceleration(positions, masses):#n2
+    n = len(positions)
+    separation = positions[None,:,:] - positions[:,None,:]
+    r2 = (separation**2).sum(axis=2)
+    # diagonal r2 is 0 (i == j); set to 1 to avoid 0/0. Safe because separation[i, i] is
+    # exactly 0, so those weights get multiplied by 0 and contribute nothing.
+    np.fill_diagonal(r2,1)
+    weight = G * masses[None, :] / r2**2                       # (n, n)
+    accelerations = (weight[:, :, None] * separation).sum(axis=1)
+    
     return np.array(accelerations)
 
 
-def total_energy(positions, velocities, masses):
+
+
+def total_energy(positions, velocities, masses):#n2
     kinetic_energy = 0
     potential_energy = 0
     for i in range(len(masses)):
