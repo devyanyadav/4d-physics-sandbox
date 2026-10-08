@@ -10,17 +10,20 @@ INITIAL_POSITIONS = np.array([[0.0, 0.0, 0.0, 0.0],
 INITIAL_VELOCITIES = np.array([[-1.0, 1.0, 0.0, 4.0],
                                [0.0, -1.0, 0.0, 0.0]])
 MASSES = np.array([5.0, 8.0])
+CHARGES =np.array([1.0,1.0])
 
 
-def compute_acceleration(positions, masses):#n2
+def compute_acceleration(positions, masses,charges):#n2
     n = len(positions)
     separation = positions[None,:,:] - positions[:,None,:]
     r2 = (separation**2).sum(axis=2)
     # diagonal r2 is 0 (i == j); set to 1 to avoid 0/0. Safe because separation[i, i] is
     # exactly 0, so those weights get multiplied by 0 and contribute nothing.
     np.fill_diagonal(r2,1)
-    weight = G * masses[None, :] / r2**2                       # (n, n)
-    accelerations = (weight[:, :, None] * separation).sum(axis=1)
+    gravity_weight = G * masses[None, :] / r2**2                       # (n, n)
+    coulumb_weight = ((charges[None,:]*charges[:,None])/masses[:,None])/r2**2
+    net_weight = gravity_weight-coulumb_weight
+    accelerations = (net_weight[:, :, None] * separation).sum(axis=1)
     
     return np.array(accelerations)
 
@@ -39,27 +42,27 @@ def total_energy(positions, velocities, masses):#n2
     return kinetic_energy + potential_energy
 
 
-def euler_step(positions, velocities, masses, dt):
+def euler_step(positions, velocities, masses, dt,charges):
     """Semi-implicit Euler: velocity first, then position uses the new velocity."""
-    acceleration = compute_acceleration(positions, masses)
+    acceleration = compute_acceleration(positions, masses,charges)
     new_velocities = velocities + acceleration * dt
     new_positions = positions + new_velocities * dt
     return new_positions, new_velocities
 
 
-def rk4_step(positions, velocities, masses, dt):
+def rk4_step(positions, velocities, masses, dt,charges):
     # each stage computes its r-slope and v-slope together
     k1_r = velocities
-    k1_v = compute_acceleration(positions, masses)
+    k1_v = compute_acceleration(positions, masses,charges)
 
     k2_r = velocities + (dt / 2) * k1_v
-    k2_v = compute_acceleration(positions + (dt / 2) * k1_r, masses)
+    k2_v = compute_acceleration(positions + (dt / 2) * k1_r, masses,charges)
 
     k3_r = velocities + (dt / 2) * k2_v
-    k3_v = compute_acceleration(positions + (dt / 2) * k2_r, masses)
+    k3_v = compute_acceleration(positions + (dt / 2) * k2_r, masses,charges)
 
     k4_r = velocities + dt * k3_v
-    k4_v = compute_acceleration(positions + dt * k3_r, masses)
+    k4_v = compute_acceleration(positions + dt * k3_r, masses,charges)
 
     new_velocities = velocities + (dt / 6) * (k1_v + 2 * k2_v + 2 * k3_v + k4_v)
     new_positions = positions + (dt / 6) * (k1_r + 2 * k2_r + 2 * k3_r + k4_r)
@@ -75,7 +78,7 @@ def run(step_fn, dt, steps):
     min_seperation = float("inf")  # minimum distance between two objects; initially infinity
 
     for i in range(steps):
-        positions, velocities = step_fn(positions, velocities, MASSES, dt)
+        positions, velocities = step_fn(positions, velocities, MASSES, dt,CHARGES)
         new_energy = total_energy(positions, velocities, MASSES)
         energy_drift.append((new_energy - initial_energy) / abs(initial_energy))
         seperation = positions[1] - positions[0]
