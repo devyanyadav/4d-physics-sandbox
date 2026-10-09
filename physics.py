@@ -10,7 +10,7 @@ INITIAL_POSITIONS = np.array([[0.0, 0.0, 0.0, 0.0],
 INITIAL_VELOCITIES = np.array([[-1.0, 1.0, 0.0, 4.0],
                                [0.0, -1.0, 0.0, 0.0]])
 MASSES = np.array([5.0, 8.0])
-CHARGES =np.array([1.0,1.0])
+CHARGES =np.array([-1.0,1.0])
 
 
 def compute_acceleration(positions, masses,charges):#n2
@@ -30,7 +30,7 @@ def compute_acceleration(positions, masses,charges):#n2
 
 
 
-def total_energy(positions, velocities, masses):#n2
+def total_energy(positions, velocities, masses,charges):#n2
     kinetic_energy = 0
     potential_energy = 0
     for i in range(len(masses)):
@@ -38,7 +38,7 @@ def total_energy(positions, velocities, masses):#n2
         for j in range(i + 1, len(masses)):  # j > i: each pair counted once
             separation = positions[j] - positions[i]
             separation_squared = np.dot(separation, separation)
-            potential_energy += (-G * masses[i] * masses[j]) / (2 * separation_squared)
+            potential_energy += ((charges[i]*charges[j])-G * masses[i] * masses[j]) / (2 * separation_squared)
     return kinetic_energy + potential_energy
 
 
@@ -74,12 +74,12 @@ def run(step_fn, dt, steps):
     positions = INITIAL_POSITIONS.copy()
     velocities = INITIAL_VELOCITIES.copy()
     energy_drift = []
-    initial_energy = total_energy(positions, velocities, MASSES)
+    initial_energy = total_energy(positions, velocities,MASSES,CHARGES)
     min_seperation = float("inf")  # minimum distance between two objects; initially infinity
 
     for i in range(steps):
         positions, velocities = step_fn(positions, velocities, MASSES, dt,CHARGES)
-        new_energy = total_energy(positions, velocities, MASSES)
+        new_energy = total_energy(positions, velocities, MASSES,CHARGES)
         energy_drift.append((new_energy - initial_energy) / abs(initial_energy))
         seperation = positions[1] - positions[0]
         r = np.sqrt(np.dot(seperation, seperation))
