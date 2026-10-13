@@ -3,6 +3,7 @@ from tesseract import Tesseract
 from functions import edge_list, project, change_view_position, change_view_orientation
 from rotation import *
 from camera import Camera
+from physics import rk4_step
 
 pygame.init()
 
@@ -31,7 +32,13 @@ pygame.mouse.set_visible(False)
 pygame.event.set_grab(True)
 
 #scene
-tesseracts = [Tesseract(4,2,3,1),Tesseract(2,4,1,6),Tesseract(-1,-4,-3,3)]
+tesseracts = [Tesseract(4,2,3,1),Tesseract(2,4,1,6)]
+masses = np.array([5.0,10.5])
+charges = np.array([1.0,-1.0])
+velocities = np.array([[-1.0, 1.0, 0.0, 4.0],
+                               [0.0, -1.0, 0.0, 0.0]])
+positions = np.array([t.position for t in tesseracts], dtype=float)
+
 if not(len(tesseracts) == 0) :
     tesseracts_world_position = []
     tesseracts_world_vertices = []
@@ -104,17 +111,21 @@ while running:
     #view transform
     # world_* is the permanent copy, view_* is rebuilt every frame and never written back
 
+        # physics: one step per frame for all objects; positions is the only thing written
+    positions, velocities = rk4_step(positions, velocities, masses, dt, charges)
+
+    # view transform: reads positions, never writes to it
     projected_tesseracts = []
-    for world_position,world_vertices in zip(tesseracts_world_position,tesseracts_world_vertices):
+    for i, world_vertices in enumerate(tesseracts_world_vertices):
+        world_position = positions[i]
         world_vertices = double_rotation(rotate_yz, rotate_zw, OBJECT_SPIN, OBJECT_SPIN, world_vertices)
+
         position_rel_camera, _ = change_view_position(camera_position, world_position)
         view_position, view_vertices = change_view_orientation(camera_orientation, world_vertices, position_rel_camera)
         camera_space_vertices = view_vertices + view_position
 
-        #projection
-        # None means a vertex is inside the near-clip margin, so the object isn't drawn
         projected_tesseracts.append(project(camera_space_vertices, W_DIST, Z_DIST, NEAR_CLIP_MARGIN))
-
+        
     #drawing
     screen.fill((0, 0, 0))
     for edges,projected in zip(tesseracts_edges,projected_tesseracts):
