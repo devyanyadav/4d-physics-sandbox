@@ -1,7 +1,7 @@
 import numpy as np
 import pygame
 from tesseract import Tesseract
-from functions import edge_list, project, change_view_position, change_view_orientation
+from functions import edge_list, project, change_view_position, change_view_orientation,apply_walls,half_side
 from rotation import *
 from camera import Camera
 from physics import rk4_step, DT
@@ -31,6 +31,10 @@ MOVE_SPEED = 3             # world units per second
 KEY_ROT_SPEED = 1.5        # radians per second
 MOUSE_SENSITIVITY = 0.001  # radians per pixel of mouse movement
 OBJECT_SPIN = 0            # fixed rotation angle applied to every object each frame (does not accumulate); 0 = off
+#the lower ends and higher ends of wall per axis
+LO = 0
+HI = 10
+
 
 # ---------- setup ----------
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -40,7 +44,7 @@ pygame.mouse.set_visible(False)
 pygame.event.set_grab(True)  # keep the cursor inside the window for mouse look
 
 # ---------- scene ----------
-tesseracts = [Tesseract(4, 2, 3, 1), Tesseract(2, 4, 1, 6)]
+tesseracts = [Tesseract(1, 2, 3, 1), Tesseract(6, 4, 3, 6)]
 masses = np.array([5.0, 10.5])
 charges = np.array([1.0, 1.0])
 
@@ -54,7 +58,8 @@ positions = INITIAL_POSITIONS.copy()
 velocities = INITIAL_VELOCITIES.copy()
 
 # Fixed per-object geometry: vertex offsets from the object's centre, and the edges between them.
-tesseracts_model_vertices = [t.vertices for t in tesseracts]
+tesseracts_model_vertices = [np.asarray(t.vertices) for t in tesseracts]
+half_sides = np.array([half_side(v) for v in tesseracts_model_vertices])
 tesseracts_edges = [edge_list(t.vertices) for t in tesseracts]
 
 # ---------- camera ----------
@@ -139,6 +144,7 @@ while running:
     steps = 0
     while accumulator >= DT and steps < MAX_STEPS_PER_FRAME:
         positions, velocities = rk4_step(positions, velocities, masses, DT, charges)
+        positions,velocities = apply_walls(positions,velocities,half_sides,LO,HI)
         accumulator -= DT
         sim_time += DT
         steps += 1

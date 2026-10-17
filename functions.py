@@ -1,7 +1,5 @@
 import numpy as np
 
-
-
 def project(vertices, w_dist, z_dist,ESP):#w_dist and z_dist are distance from camera
     w = vertices[:, 3]
     if (w_dist-vertices[:,3] >= ESP).all() :
@@ -39,3 +37,24 @@ def change_view_orientation(camera_orientation,tesseract_vertices,tesseract_posi
     tesseract_vertices = tesseract_vertices @ camera_orientation.T
     view_tesseract_position = tesseract_position @ camera_orientation.T
     return view_tesseract_position,tesseract_vertices
+
+def half_side(vertices):
+    vertices = np.asarray(vertices)
+    return (vertices[:, 0].max() - vertices[:, 0].min()) / 2
+
+def apply_walls(positions, velocities, half_sides,LO,HI):
+    positions = positions.copy()
+    velocities = velocities.copy()
+    for i in range(len(positions)):
+        for a in range(4):
+            # lower wall: the lower face has crossed
+            if positions[i][a] - half_sides[i] < LO:
+                positions[i][a] = LO + half_sides[i]
+                velocities[i][a] = abs(velocities[i][a])
+            # upper wall: the upper face has crossed
+            if positions[i][a] + half_sides[i] > HI:
+                positions[i][a] = HI - half_sides[i]
+                velocities[i][a] = -abs(velocities[i][a])
+    return positions, velocities
+        
+
