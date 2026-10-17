@@ -39,6 +39,7 @@ def total_energy(positions, velocities, masses,charges):#n2
             separation = positions[j] - positions[i]
             separation_squared = np.dot(separation, separation)
             potential_energy += ((charges[i]*charges[j])-G * masses[i] * masses[j]) / (2 * separation_squared)
+    print(kinetic_energy)
     return kinetic_energy + potential_energy
 
 

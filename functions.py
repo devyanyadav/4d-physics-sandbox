@@ -45,16 +45,23 @@ def half_side(vertices):
 def apply_walls(positions, velocities, half_sides,LO,HI):
     positions = positions.copy()
     velocities = velocities.copy()
+    hits = []
     for i in range(len(positions)):
         for a in range(4):
             # lower wall: the lower face has crossed
             if positions[i][a] - half_sides[i] < LO:
                 positions[i][a] = LO + half_sides[i]
                 velocities[i][a] = abs(velocities[i][a])
+                hits.append((i,a,-1))
             # upper wall: the upper face has crossed
             if positions[i][a] + half_sides[i] > HI:
                 positions[i][a] = HI - half_sides[i]
                 velocities[i][a] = -abs(velocities[i][a])
-    return positions, velocities
-        
+                hits.append((i,a,1))
+    return positions, velocities,hits
+
+def can_resize(positions, half_sides, new_lo, new_hi, tolerance=1e-9):
+    lowest_face = (positions - half_sides[:, None]).min()
+    highest_face = (positions + half_sides[:, None]).max()
+    return bool(lowest_face >= new_lo - tolerance and highest_face <= new_hi + tolerance)
 
