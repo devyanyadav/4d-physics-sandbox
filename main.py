@@ -1,7 +1,7 @@
 import numpy as np
 import pygame
 from tesseract import Tesseract
-from functions import edge_list, project, change_view_position, change_view_orientation,apply_walls,half_side
+from functions import *
 from rotation import *
 from camera import Camera
 from physics import rk4_step, DT
@@ -32,8 +32,9 @@ KEY_ROT_SPEED = 1.5        # radians per second
 MOUSE_SENSITIVITY = 0.001  # radians per pixel of mouse movement
 OBJECT_SPIN = 0            # fixed rotation angle applied to every object each frame (does not accumulate); 0 = off
 #the lower ends and higher ends of wall per axis
-LO = 0
-HI = 10
+WALL_LO = 0
+WALL_HI = 10
+MAX_HI = 15 #the higher_end of wall can't grow past this
 
 
 # ---------- setup ----------
@@ -74,7 +75,11 @@ camera_orientation = camera.orientation
 running = True
 accumulator = 0.0  # simulated seconds the physics still owes
 sim_time = 0.0     # simulated seconds since the last reset
-
+wall_on = True
+lo = WALL_LO
+hi = WALL_HI
+message_text = ""
+message_expires = 0
 while running:
     frame_time = clock.tick(FPS) / 1000  # real seconds since the previous frame
     accumulator += frame_time * TIME_SCALE
@@ -101,7 +106,43 @@ while running:
             camera.orientation = INITIAL_CAMERA_ORIENTATION.copy()
             camera_position = camera.position        # re-read: this loop holds its own references
             camera_orientation = camera.orientation
+            #resets the wall
+            lo = WALL_LO
+            hi = WALL_HI
+            wall_on = True
+            #resets any message
+            message_text = ""
+            message_expires = 0
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_t:
+                if wall_on:
+                    wall_on = False
+                elif can_resize(positions, half_sides, lo, hi):
+                    wall_on = True
+                else:
+                    message_text = "can't turn walls on: object outside box"
+                    message_expires = pygame.time.get_ticks() + 1500
+            else:
+                new_lo, new_hi = lo, hi
+                if event.key == pygame.K_z:   # lo down (box grows)
+                    new_lo = lo - 1
+                elif event.key == pygame.K_x: # lo up (box shrinks)
+                    new_lo = lo + 1
+                elif event.key == pygame.K_c: # hi down (box shrinks)
+                    new_hi = hi - 1
+                elif event.key == pygame.K_v: # hi up (box grows)
+                    new_hi = hi + 1
 
+                if (new_lo, new_hi) != (lo, hi):
+                    shrinking = new_lo > lo or new_hi < hi
+                    if new_hi > MAX_HI:
+                        message_text = "box can't grow past the cull range"
+                        message_expires = pygame.time.get_ticks() + 1500
+                    elif shrinking and not can_resize(positions, half_sides, new_lo, new_hi):
+                        message_text = "box can't shrink: object in the way"
+                        message_expires = pygame.time.get_ticks() + 1500
+                    else:
+                        lo, hi = new_lo, new_hi
     # ---------- camera input ----------
     # Mouse motion is summed over the frame and applied as one xz and one yz rotation.
     # Rotations don't commute, so applying many small ones per event gave an inconsistent order.
@@ -142,15 +183,24 @@ while running:
     # ---------- physics ----------
     # Spend the owed time in fixed steps of DT (0 or more per frame), all objects together.
     steps = 0
+    frame_hits = []
     while accumulator >= DT and steps < MAX_STEPS_PER_FRAME:
         positions, velocities = rk4_step(positions, velocities, masses, DT, charges)
-        positions,velocities = apply_walls(positions,velocities,half_sides,LO,HI)
+        if wall_on:
+            positions,velocities,hits = apply_walls(positions,velocities,half_sides,lo,hi)
+            frame_hits.extend(hits)
         accumulator -= DT
         sim_time += DT
         steps += 1
     if accumulator >= DT:
         accumulator = 0.0  # stopped by the step cap, not by running out of owed time: drop the backlog
 
+    if frame_hits:
+        parts = []
+        for i, a, side in frame_hits:
+            parts.append(f"obj {i+1} {'+' if side > 0 else '-'}{'xyzw'[a]}")
+        message_text = "hit: " + ", ".join(parts)
+        message_expires = pygame.time.get_ticks() + 1500
     # ---------- view transform ----------
     # positions and the model vertices are the permanent copies.
     # Everything computed here is rebuilt every frame and never written back.
@@ -175,9 +225,15 @@ while running:
             screen_points = projected * PIXELS_PER_UNIT + SCREEN_CENTER
             for a, b in edges:
                 pygame.draw.line(screen, "gray", screen_points[a], screen_points[b])
-    # on-screen sim time, drawn last so it sits on top of the objects
+        # on-screen text, drawn last so it sits on top of the objects
     sim_time_text = font.render(f"sim time {sim_time:.1f} s", True, (255, 255, 255))
     screen.blit(sim_time_text, (10, 10))
+    status = f"walls: ON [{lo}, {hi}]" if wall_on else "walls: OFF"
+    screen.blit(font.render(status, True, (255, 255, 255)), (10, 40))
+    if pygame.time.get_ticks() < message_expires:
+        message = font.render(message_text, True, (255, 255, 255))
+        screen.blit(message, (10, 70))
+
     pygame.display.flip()
 
 pygame.quit()
