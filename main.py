@@ -17,9 +17,17 @@ PIXELS_PER_UNIT = 100  # projected unit coordinates -> screen pixels
 
 # Simulated seconds per real second (1.0 = real time, 0.1 = 10x slower).
 # Only scales the time fed to the accumulator; the integrator step DT is unchanged.
-TIME_SCALE = 0.1
+# Changed only by the [ and ] keys, clamped to the range below.
+time_scale = 0.1
+TIME_SCALE_MIN = 0.05
+TIME_SCALE_MAX = 8.0
+paused = False  # toggled only by space
 # Safety cap on physics steps per frame. If a slow frame needs more, the backlog is dropped.
 MAX_STEPS_PER_FRAME = 10
+
+# Diagnostic: once per real second print min separation, max speed, and whether positions are finite.
+# Set to False (or delete the DEBUG blocks) when you no longer need it.
+DEBUG = True
 
 # Fixed eye-to-glass distances for the projection (NOT the camera's position)
 Z_DIST = 20
@@ -45,14 +53,15 @@ pygame.mouse.set_visible(False)
 pygame.event.set_grab(True)  # keep the cursor inside the window for mouse look
 
 # ---------- scene ----------
-tesseracts = [Tesseract(1, 2, 3, 1), Tesseract(6, 4, 3, 6)]
-masses = np.array([5.0, 10.5])
-charges = np.array([1.0, 1.0])
+tesseracts = [Tesseract(1, 2, 3, 1), Tesseract(6, 4, 3, 6),Tesseract(5,1,6,2)]
+masses = np.array([5.0, 10.5,30.0])
+charges = np.array([1.0, 1.0,-1.0])
 
 # Starting state. Constants: never modified, reset copies from them.
 INITIAL_POSITIONS = np.array([t.position for t in tesseracts], dtype=float)
 INITIAL_VELOCITIES = np.array([[-1.0, 1.0, 0.0, 4.0],
-                               [0.0, -1.0, 0.0, 0.0]])
+                               [0.0, -1.0, 0.0, 0.0],
+                               [1.2,3.0,1.0,4.2]])
 
 # Live physics state, written only by the physics step (and reset). The view loop only reads positions.
 positions = INITIAL_POSITIONS.copy()
@@ -80,13 +89,17 @@ lo = WALL_LO
 hi = WALL_HI
 message_text = ""
 message_expires = 0
+debug_timer = 0.0  # real seconds since the last diagnostic print
 while running:
     frame_time = clock.tick(FPS) / 1000  # real seconds since the previous frame
-    accumulator += frame_time * TIME_SCALE
+    # While paused nothing is owed, so unpausing doesn't cause a burst of catch-up steps.
+    if not paused:
+        accumulator += frame_time * time_scale
 
     # ---------- events ----------
     mouse_dx = 0
     mouse_dy = 0
+    step_once = False  # set by N while paused: run exactly one DT step this frame
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
@@ -102,6 +115,7 @@ while running:
             velocities = INITIAL_VELOCITIES.copy()
             accumulator = 0.0
             sim_time = 0.0
+            paused = False  # speed (time_scale) is kept
             camera.position = INITIAL_CAMERA_POSITION.copy()
             camera.orientation = INITIAL_CAMERA_ORIENTATION.copy()
             camera_position = camera.position        # re-read: this loop holds its own references
@@ -113,6 +127,17 @@ while running:
             #resets any message
             message_text = ""
             message_expires = 0
+        # sim speed and pause: KEYDOWN, so one press does one thing (get_pressed fires every frame)
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_SPACE:
+                paused = not paused
+            elif event.key == pygame.K_LEFTBRACKET:
+                time_scale = max(TIME_SCALE_MIN, time_scale / 2)
+            elif event.key == pygame.K_RIGHTBRACKET:
+                time_scale = min(TIME_SCALE_MAX, time_scale * 2)
+            elif event.key == pygame.K_n and paused:
+                accumulator += DT  # owe exactly one step
+                step_once = True
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_t:
                 if wall_on:
@@ -182,18 +207,20 @@ while running:
 
     # ---------- physics ----------
     # Spend the owed time in fixed steps of DT (0 or more per frame), all objects together.
+    # Runs when not paused, or when paused with a single step requested (N).
     steps = 0
     frame_hits = []
-    while accumulator >= DT and steps < MAX_STEPS_PER_FRAME:
-        positions, velocities = rk4_step(positions, velocities, masses, DT, charges)
-        if wall_on:
-            positions,velocities,hits = apply_walls(positions,velocities,half_sides,lo,hi)
-            frame_hits.extend(hits)
-        accumulator -= DT
-        sim_time += DT
-        steps += 1
-    if accumulator >= DT:
-        accumulator = 0.0  # stopped by the step cap, not by running out of owed time: drop the backlog
+    if not paused or step_once:
+        while accumulator >= DT and steps < MAX_STEPS_PER_FRAME:
+            positions, velocities = rk4_step(positions, velocities, masses, DT, charges)
+            if wall_on:
+                positions,velocities,hits = apply_walls(positions,velocities,half_sides,lo,hi)
+                frame_hits.extend(hits)
+            accumulator -= DT
+            sim_time += DT
+            steps += 1
+        if accumulator >= DT:
+            accumulator = 0.0  # stopped by the step cap, not by running out of owed time: drop the backlog
 
     if frame_hits:
         parts = []
@@ -201,6 +228,17 @@ while running:
             parts.append(f"obj {i+1} {'+' if side > 0 else '-'}{'xyzw'[a]}")
         message_text = "hit: " + ", ".join(parts)
         message_expires = pygame.time.get_ticks() + 1500
+
+    # ---------- diagnostic ----------
+    if DEBUG:
+        debug_timer += frame_time
+        if debug_timer >= 1.0:
+            debug_timer = 0.0
+            separations = np.sqrt(((positions[:, None, :] - positions[None, :, :]) ** 2).sum(axis=-1))
+            np.fill_diagonal(separations, np.inf)  # ignore each object's distance to itself
+            print(f"sim {sim_time:.1f}s  min sep {separations.min():.2f}  "
+                  f"max |v| {np.abs(velocities).max():.2f}  finite {np.isfinite(positions).all()}")
+
     # ---------- view transform ----------
     # positions and the model vertices are the permanent copies.
     # Everything computed here is rebuilt every frame and never written back.
@@ -225,9 +263,11 @@ while running:
             screen_points = projected * PIXELS_PER_UNIT + SCREEN_CENTER
             for a, b in edges:
                 pygame.draw.line(screen, "gray", screen_points[a], screen_points[b])
-        # on-screen text, drawn last so it sits on top of the objects
+    # on-screen text, drawn last so it sits on top of the objects
     sim_time_text = font.render(f"sim time {sim_time:.1f} s", True, (255, 255, 255))
     screen.blit(sim_time_text, (10, 10))
+    speed_label = f"speed {time_scale:g}x" + ("  PAUSED" if paused else "")
+    screen.blit(font.render(speed_label, True, (255, 255, 255)), (260, 10))
     status = f"walls: ON [{lo}, {hi}]" if wall_on else "walls: OFF"
     screen.blit(font.render(status, True, (255, 255, 255)), (10, 40))
     if pygame.time.get_ticks() < message_expires:
