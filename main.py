@@ -26,8 +26,7 @@ paused = False  # toggled only by space
 MAX_STEPS_PER_FRAME = 10
 
 # Diagnostic: once per real second print min separation, max speed, and whether positions are finite.
-# Set to False (or delete the DEBUG blocks) when you no longer need it.
-DEBUG = True
+DEBUG = False
 
 # Fixed eye-to-glass distances for the projection (NOT the camera's position)
 Z_DIST = 20
@@ -44,7 +43,7 @@ WALL_LO = 0
 WALL_HI = 10
 MAX_HI = 15 #the higher_end of wall can't grow past this
 
-
+E=1#softening term
 # ---------- setup ----------
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 clock = pygame.time.Clock()
@@ -212,7 +211,7 @@ while running:
     frame_hits = []
     if not paused or step_once:
         while accumulator >= DT and steps < MAX_STEPS_PER_FRAME:
-            positions, velocities = rk4_step(positions, velocities, masses, DT, charges)
+            positions, velocities = rk4_step(positions, velocities, masses, DT, charges,E)
             if wall_on:
                 positions,velocities,hits = apply_walls(positions,velocities,half_sides,lo,hi)
                 frame_hits.extend(hits)
